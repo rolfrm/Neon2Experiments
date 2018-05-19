@@ -29,8 +29,6 @@ void glfwError(int x, const char * err){
   ERROR("%i %s", x, err);
 }
 
-
-
 gl_context_data * get_or_init_context(){
   static module_data ctx_holder;
   static bool glfw_inited = false;
@@ -82,7 +80,7 @@ void post_render_scene(){
   glfwSwapBuffers(ctx->window);
   //logd("Post render\n");
 }
-
+void gui_init_module();
 void init_module(){
   gl_pre_render = intern_string("gl/pre_render");
   gl_post_render = intern_string("gl/post_render");
@@ -92,6 +90,8 @@ void init_module(){
 
   register_method(gl_pre_render, pre_render_scene);
   register_method(gl_post_render, post_render_scene);
+
+  gui_init_module();
   
 }
 

@@ -9,9 +9,9 @@
 #include <iron/mem.h>
 #include <iron/fileio.h>
 #include <iron/utils.h>
-#include "stb_image.h"
+//#include "stb_image.h"
 #include "gl_utils.h"
-
+/*
 u32 loadImage(u8 * pixels, u32 width, u32 height, u32 channels){
   
   GLuint tex = 0;
@@ -60,7 +60,7 @@ u32 pixels_channels = 0;
   glTexImage2D(GL_TEXTURE_2D, 0, intype, width, height, 0, pixels_channels, GL_UNSIGNED_BYTE, pixels);
   return tex;
 }
-/*
+
 u32 loadImagef(float * pixels, u32 width, u32 height, u32 channels){
   return loadImagefx(pixels, width, height, channels, GL_LINEAR);
 }
