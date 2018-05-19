@@ -49,12 +49,15 @@ gl_context_data * get_or_init_context(){
     glfwWindowHint(GLFW_SAMPLES, 16);
     glfwWindowHint(GLFW_DEPTH_BITS, 32);
     glfwWindowHint( GLFW_OPENGL_DEBUG_CONTEXT, true);
-    GLFWwindow * window = glfwCreateWindow(512, 512, "GL MODULE", NULL, NULL);
+    GLFWwindow * window = glfwCreateWindow(1920, 1200, "GL MODULE", NULL, NULL);
     logd("Created context : %i    %i    %i\n", ctx, ctx->window, window);
     if(window == NULL)
       ERROR("Unable to create window!\n");
     ASSERT(window != NULL);
     ctx->window = window;
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
     glfwMakeContextCurrent(window);
     glewInit();
 

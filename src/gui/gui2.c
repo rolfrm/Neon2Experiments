@@ -77,7 +77,7 @@ static void pre_render_scene(){
     rect.uv_offset_loc = loc("uv_offset");
     rect.uv_size_loc = loc("uv_size");
     wind->rect = rect;
-    wind->center_pos = vec2_new(5,6);
+    wind->center_pos = vec2_new(19/2,6);
 
   }
   {
@@ -85,14 +85,14 @@ static void pre_render_scene(){
     rectangle_shader rect = wind->rect;
     glUseProgram(rect.prog);
     
-    glUniform2f(rect.window_size_loc, 10, 10);
+    glUniform2f(rect.window_size_loc, 19, 10);
     glUniform1i(rect.mode_loc, 0);
     glUniform4f(rect.color_loc, 1,0,0,0);
 
     glUniform2f(rect.size_loc, 1, 1);
     vec2 center = wind->center_pos;
     
-    for(int i = 0; i < 10; i++){
+    for(int i = 0; i < 19; i++){
       for(int j = 0; j < 10; j++){
 	
 	vec2 pos = vec2_new(i,j);
