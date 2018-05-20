@@ -50,27 +50,12 @@ typedef struct {
   windows_index win;
 }window_data;
 
-
-
-window_data * get_window_ctx(){
-  static module_data ctx_holder2 = {0};
-  window_data * window_data = get_module_data(&ctx_holder2);
-  dmsg(ui_verbose,"rendering windows..\n");
-  if(window_data == NULL){
-    window_data = alloc0(sizeof(window_data[0]));
-    window_data->window_vector = windows_create(NULL);
-    window_data->window_table = window_table_create(NULL);
-    window_data->children = u64_to_u64_create(NULL);
-    window_data->window_ctx = u64_to_ptr_create(NULL);
-    ((bool *)&(window_data->children->is_multi_table))[0] = true;
-    window_data->baseclass = u64_to_u64_create(NULL);
-    ((bool *)&(window_data->baseclass->is_multi_table))[0] = true;
-    window_data->methods = methods_create(NULL);
-    set_module_data(&ctx_holder2, window_data);
-    dmsg(ui,"Created windows holder\n");
-  }
-  return window_data;
-}
+  
+method _get_method(u64 class_id, u64 method_id);
+void _set_method(u64  class_id, u64 method_id, method m);
+#define get_method(class, method) _get_method(class, (size_t)&method)
+#define set_method(class, method, impl) _set_method(class, (size_t)&method, impl)
+window_data * get_window_ctx();
 
 method _get_method(u64 class_id, u64 method_id){
   var ctx = get_window_ctx();
@@ -109,16 +94,29 @@ u64 get_baseclass(u64 item, u64 * index){
   return ctx->baseclass->value[_index];
 }
 
-#define CALL_METHOD(Item, Method, ...)\
+void _set_baseclass(u64 item, u64 class){
+  var ctx = get_window_ctx();
+  u64_to_u64_set(ctx->baseclass, item, class);
+}
+
+#define set_baseclass(item, class) _set_baseclass(item, (size_t)&class);
+
+#define CALL_BASE(Item, Method, ...)\
   ({\
-    method m1 = get_method(Item, Method);		\
-    if(m1 != NULL) m1(Item, __VA_ARGS__);		\
     u64 index = 0, base = 0;\
     while(0 != (base = get_baseclass(Item, &index))){	\
       method m = get_method(base, Method);		\
       if(m != NULL) m(Item, __VA_ARGS__);		\
     }							\
   })
+
+#define CALL_METHOD(Item, Method, ...)\
+  ({\
+    method m1 = get_method(Item, Method);	\
+    if(m1 != NULL) m1(Item, __VA_ARGS__);		\
+  })
+
+u64 window_class;
 
 u64 window_pos_method;
 u64 window_size_method;
@@ -128,6 +126,8 @@ u64 mouse_scroll_method;
 u64 key_method;
 u64 char_method;
 u64 window_close_method;
+u64 render_method;
+
 void window_pos_callback(GLFWwindow* glwindow, int xpos, int ypos)
 {
   u64 w = get_window_id(glwindow);
@@ -173,10 +173,20 @@ void window_close_callback(GLFWwindow * glwindow){
   CALL_METHOD(win_id, window_close_method, 0);
 }
 
+void on_window_class_render(u64 win_id){
+  logd("Rendering class.. %i\n", win_id);
+}
+
+void on_window_render(u64 win_id){
+  logd("Rendering.. %i\n", win_id);
+  CALL_BASE(win_id, render_method, 0);
+}
+
 windows_index create_window(float width, float height, const char * title){
   var win_ctx = get_window_ctx();
   GLFWwindow * window = module_create_window(width, height, title);
   var idx = windows_alloc(win_ctx->window_vector);
+  set_baseclass(idx.index, window_class);
   window_table_set(win_ctx->window_table, idx);
   u64_to_ptr_set(win_ctx->window_ctx, idx.index, window);
 
@@ -189,7 +199,8 @@ windows_index create_window(float width, float height, const char * title){
   glfwSetWindowCloseCallback(window, window_close_callback);
   glfwSetCharCallback(window, char_callback);
   glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
-  
+  set_method(idx.index, render_method, (method) on_window_render);
+
   return idx;
 }
 static void win_pos_update(u64 win_id, int x, int y){
@@ -200,7 +211,6 @@ static void cursor_pos_update(u64 win_id, double x, double y){
   logd("Cursor id: %i Pos: %f %f\n", win_id, x, y);
 }
 
-
 static void pre_render_scene(){
   
   let wind =  get_window_ctx();
@@ -208,6 +218,11 @@ static void pre_render_scene(){
     gl_init_debug_calls();
     wind->init_dbg = true;
   }
+
+  for(u64 i = 0; i < wind->window_table->count; i++){
+    CALL_METHOD(wind->window_table->id[i + 1].index, render_method, 0);
+  }
+  
   GLFWwindow * ptr;
   if(!wind->demo_loaded){
     wind->demo_loaded = true;
@@ -244,6 +259,9 @@ static void pre_render_scene(){
     ASSERT(u64_to_ptr_try_get(wind->window_ctx, &(wind->win.index), (void *)&ptr));
     glfwMakeContextCurrent(ptr);
   }
+
+
+  
   
   {
     
@@ -297,4 +315,26 @@ void gui_init_module(){
   
   //var ds = datastream_server_run();
   //datastream_server_wait_for_connect(ds);
+}
+
+window_data * get_window_ctx(){
+  static module_data ctx_holder2 = {0};
+  window_data * window_data = get_module_data(&ctx_holder2);
+  dmsg(ui_verbose,"rendering windows..\n");
+  if(window_data == NULL){
+    window_data = alloc0(sizeof(window_data[0]));
+    window_data->window_vector = windows_create(NULL);
+    window_data->window_table = window_table_create(NULL);
+    window_data->children = u64_to_u64_create(NULL);
+    window_data->window_ctx = u64_to_ptr_create(NULL);
+    ((bool *)&(window_data->children->is_multi_table))[0] = true;
+    window_data->baseclass = u64_to_u64_create(NULL);
+    ((bool *)&(window_data->baseclass->is_multi_table))[0] = true;
+    window_data->methods = methods_create(NULL);
+    set_module_data(&ctx_holder2, window_data);
+    dmsg(ui,"Created windows holder\n");
+    set_method((size_t)&window_class, render_method, (method) on_window_class_render);
+
+  }
+  return window_data;
 }
