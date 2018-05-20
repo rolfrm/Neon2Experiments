@@ -196,6 +196,10 @@ static void win_pos_update(u64 win_id, int x, int y){
   logd("id: %i Pos: %i %i\n", win_id, x, y);
 }
 
+static void cursor_pos_update(u64 win_id, double x, double y){
+  logd("Cursor id: %i Pos: %f %f\n", win_id, x, y);
+}
+
 
 static void pre_render_scene(){
   
@@ -234,7 +238,7 @@ static void pre_render_scene(){
     wind->demo_loaded = true;
 
     set_method(wind->win.index, window_pos_method, (method)win_pos_update);
-    set_method(wind->win.index, mouse_over_method, (method)win_pos_update);
+    set_method(wind->win.index, mouse_over_method, (method)cursor_pos_update);
     
   }else{
     ASSERT(u64_to_ptr_try_get(wind->window_ctx, &(wind->win.index), (void *)&ptr));
