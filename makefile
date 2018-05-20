@@ -1,5 +1,5 @@
-OPT = -g3 -O0
-LIB_SOURCES1 = main.c gui/stb_truetype.c gl/gl_module.c gl/gl_utils.c gui/gui2.c
+oOPT = -g3 -O0
+LIB_SOURCES1 = main.c gui/stb_truetype.c gl/gl_module.c gl/gl_utils.c gui/gui2.c gui/utf8.c
 LIB_SOURCES = $(addprefix src/, $(LIB_SOURCES1))
 CC = gcc
 TARGET = nth.so

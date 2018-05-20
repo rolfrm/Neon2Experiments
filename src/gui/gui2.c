@@ -1,6 +1,8 @@
 #include <GL/glew.h>
 #include <iron/full.h>
 #include <neon.h>
+#include <GLFW/glfw3.h>
+
 #include "gl/gl_module.h"
 #include "gl/gl_utils.h"
 #include "windows.h"
@@ -10,7 +12,14 @@
 #include "u64_to_u64.h"
 #include "u64_to_u64.c"
 
+#include "u64_to_ptr.h"
+#include "u64_to_ptr.c"
+
+#include "methods.h"
+#include "methods.c"
+
 #include <iron/datastream_server.h>
+#include "utf8.h"
 
 u32 gui_render_window;
 
@@ -28,12 +37,20 @@ typedef struct{
 typedef struct {
   windows * window_vector;
   window_table * window_table;
+  u64_to_ptr * window_ctx;
   u64_to_u64 * children;
+  u64_to_u64 * baseclass;
+  methods * methods;
 
   bool init_dbg;
+
+  bool demo_loaded;
   rectangle_shader rect;
   vec2 center_pos;
+  windows_index win;
 }window_data;
+
+
 
 window_data * get_window_ctx(){
   static module_data ctx_holder2 = {0};
@@ -44,13 +61,141 @@ window_data * get_window_ctx(){
     window_data->window_vector = windows_create(NULL);
     window_data->window_table = window_table_create(NULL);
     window_data->children = u64_to_u64_create(NULL);
+    window_data->window_ctx = u64_to_ptr_create(NULL);
     ((bool *)&(window_data->children->is_multi_table))[0] = true;
+    window_data->baseclass = u64_to_u64_create(NULL);
+    ((bool *)&(window_data->baseclass->is_multi_table))[0] = true;
+    window_data->methods = methods_create(NULL);
     set_module_data(&ctx_holder2, window_data);
     dmsg(ui,"Created windows holder\n");
-  }else{
   }
   return window_data;
 }
+
+method _get_method(u64 class_id, u64 method_id){
+  var ctx = get_window_ctx();
+  method m;
+  method_key key = {.method = method_id, .class = class_id};
+  if(methods_try_get(ctx->methods, &key, &m))
+    return m;
+  return NULL;
+}
+
+void _set_method(u64  class_id, u64 method_id, method m){
+  var ctx = get_window_ctx();
+  method_key key = {.method = method_id, .class = class_id};
+  methods_set(ctx->methods, key, m);
+}
+
+
+
+u64 get_window_id(GLFWwindow * glwindow){
+  var ctx = get_window_ctx();
+  for(u64 i = 0; i < ctx->window_ctx->count; i++){
+    if(ctx->window_ctx->value[i + 1] == glwindow)
+      return ctx->window_ctx->key[i + 1];
+  }
+  return 0;
+}
+
+#define get_method(class, method) _get_method(class, (size_t)&method)
+#define set_method(class, method, impl) _set_method(class, (size_t)&method, impl)
+
+u64 get_baseclass(u64 item, u64 * index){
+  var ctx = get_window_ctx();
+  u64 _index;
+  if(u64_to_u64_iter(ctx->baseclass, &item, 1, NULL, &_index, 1, index) == 0)
+    return 0;
+  return ctx->baseclass->value[_index];
+}
+
+#define CALL_METHOD(Item, Method, ...)\
+  ({\
+    method m1 = get_method(Item, Method);		\
+    if(m1 != NULL) m1(Item, __VA_ARGS__);		\
+    u64 index = 0, base = 0;\
+    while(0 != (base = get_baseclass(Item, &index))){	\
+      method m = get_method(base, Method);		\
+      if(m != NULL) m(Item, __VA_ARGS__);		\
+    }							\
+  })
+
+u64 window_pos_method;
+u64 window_size_method;
+u64 mouse_over_method;
+u64 mouse_button_method;
+u64 mouse_scroll_method;
+u64 key_method;
+u64 char_method;
+u64 window_close_method;
+void window_pos_callback(GLFWwindow* glwindow, int xpos, int ypos)
+{
+  u64 w = get_window_id(glwindow);
+  CALL_METHOD(w, window_pos_method, xpos, ypos);
+}
+
+void window_size_callback(GLFWwindow* glwindow, int width, int height)
+{
+  u64 w = get_window_id(glwindow);
+  CALL_METHOD(w, window_size_method, width, height);
+}
+
+void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
+  u64 win_id = get_window_id(glwindow);
+  CALL_METHOD(win_id, mouse_over_method, x, y);
+}
+
+void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mods){
+  u64 win_id = get_window_id(glwindow);
+  CALL_METHOD(win_id, mouse_button_method, button, action, mods);
+}
+
+void scroll_callback(GLFWwindow * glwindow, double x, double y){
+  u64 win_id = get_window_id(glwindow);
+  CALL_METHOD(win_id, mouse_scroll_method, x, y);
+}
+
+void key_callback(GLFWwindow* glwindow, int key, int scancode, int action, int mods){
+  u64 win_id = get_window_id(glwindow);
+  CALL_METHOD(win_id, key_method, key, scancode, action, mods);
+}
+
+void char_callback(GLFWwindow * glwindow, u32 codepoint){
+  if(0 == codepoint_to_utf8(codepoint,NULL, 10))
+    return; // WTF! Invalid codepoint!
+  u64 win_id = get_window_id(glwindow);
+  CALL_METHOD(win_id, char_method, codepoint);
+    
+}
+
+void window_close_callback(GLFWwindow * glwindow){
+  u64 win_id = get_window_id(glwindow);
+  CALL_METHOD(win_id, window_close_method, 0);
+}
+
+windows_index create_window(float width, float height, const char * title){
+  var win_ctx = get_window_ctx();
+  GLFWwindow * window = module_create_window(width, height, title);
+  var idx = windows_alloc(win_ctx->window_vector);
+  window_table_set(win_ctx->window_table, idx);
+  u64_to_ptr_set(win_ctx->window_ctx, idx.index, window);
+
+  glfwSetWindowPosCallback(window, window_pos_callback);
+  glfwSetWindowSizeCallback(window, window_size_callback);
+  glfwSetCursorPosCallback(window, cursor_pos_callback);
+  glfwSetMouseButtonCallback(window, mouse_button_callback);
+  glfwSetKeyCallback(window, key_callback);
+  glfwSetScrollCallback(window, scroll_callback);
+  glfwSetWindowCloseCallback(window, window_close_callback);
+  glfwSetCharCallback(window, char_callback);
+  glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
+  
+  return idx;
+}
+static void win_pos_update(u64 win_id, int x, int y){
+  logd("id: %i Pos: %i %i\n", win_id, x, y);
+}
+
 
 static void pre_render_scene(){
   
@@ -58,13 +203,21 @@ static void pre_render_scene(){
   if(!wind->init_dbg){
     gl_init_debug_calls();
     wind->init_dbg = true;
+  }
+  GLFWwindow * ptr;
+  if(!wind->demo_loaded){
+    wind->demo_loaded = true;
+    wind->win = create_window(512,512,"GUI2");
 
+    ASSERT(u64_to_ptr_try_get(wind->window_ctx, &(wind->win.index), (void *) &ptr));
+    glfwMakeContextCurrent(ptr);
     int r_vs = compileShaderFromFile(GL_VERTEX_SHADER, "rect_shader.vs");
     int r_fs = compileShaderFromFile(GL_FRAGMENT_SHADER, "rect_shader.fs");
-    logd(" %i %i\n", r_vs, r_fs);
 
     rectangle_shader rect;
     rect.prog = linkGlProgram(2, r_vs,r_fs);
+    glDeleteShader(r_vs);
+    glDeleteShader(r_fs);
     int loc(const char * name){
       return glGetUniformLocation(rect.prog, name);
     }
@@ -78,8 +231,16 @@ static void pre_render_scene(){
     rect.uv_size_loc = loc("uv_size");
     wind->rect = rect;
     wind->center_pos = vec2_new(5,6);
+    wind->demo_loaded = true;
 
+    set_method(wind->win.index, window_pos_method, (method)win_pos_update);
+    set_method(wind->win.index, mouse_over_method, (method)win_pos_update);
+    
+  }else{
+    ASSERT(u64_to_ptr_try_get(wind->window_ctx, &(wind->win.index), (void *)&ptr));
+    glfwMakeContextCurrent(ptr);
   }
+  
   {
     
     rectangle_shader rect = wind->rect;
@@ -103,13 +264,13 @@ static void pre_render_scene(){
       }
     }
     wind->center_pos = vec2_add(wind->center_pos, vec2_new(randf32() * 0.1 - 0.05, randf32() * 0.1 - 0.05));
-
+    glfwSwapBuffers(ptr);
     
 
   }
-  
-  
 }
+
+//GLFWwindow 
 
 //void update_activity(const data_stream * stream, const void * _data, size_t _length, void * userdata){
 

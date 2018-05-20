@@ -29,6 +29,8 @@ void glfwError(int x, const char * err){
   ERROR("%i %s", x, err);
 }
 
+
+
 gl_context_data * get_or_init_context(){
   static module_data ctx_holder;
   static bool glfw_inited = false;
@@ -49,6 +51,7 @@ gl_context_data * get_or_init_context(){
     glfwWindowHint(GLFW_SAMPLES, 16);
     glfwWindowHint(GLFW_DEPTH_BITS, 32);
     glfwWindowHint( GLFW_OPENGL_DEBUG_CONTEXT, true);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     GLFWwindow * window = glfwCreateWindow(512, 512, "GL MODULE", NULL, NULL);
     logd("Created context : %i    %i    %i\n", ctx, ctx->window, window);
     if(window == NULL)
@@ -57,28 +60,27 @@ gl_context_data * get_or_init_context(){
     ctx->window = window;
     glfwMakeContextCurrent(window);
     glewInit();
-
   }
   return ctx;
+}
+
+GLFWwindow * module_create_window(int width, int height, const char * title){
+  var ctx = get_or_init_context();
+  glfwWindowHint(GLFW_SAMPLES, 16);
+  glfwWindowHint(GLFW_DEPTH_BITS, 32);
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+  glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
+  GLFWwindow * window = glfwCreateWindow(width, height, title, NULL, ctx->window);
+  return window;
 }
 
 void pre_render_scene(){
   gl_context_data * ctx = get_or_init_context();
   glfwMakeContextCurrent(ctx->window);
-  int width, height;
-  glfwGetWindowSize(ctx->window, &width, &height);
-  glViewport(0, 0, width, height);
-  glClearColor(1, 1, 1, 1);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-  //logd("Pre render\n");
 }
 
 void post_render_scene(){
-  gl_context_data * ctx = get_or_init_context();
   glfwPollEvents();
-  glfwSwapBuffers(ctx->window);
-  //logd("Post render\n");
 }
 void gui_init_module();
 void init_module(){
