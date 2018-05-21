@@ -10,6 +10,9 @@
 #include "pid_to_vec4.h"
 #include "pid_lookup.h"
 
+#include "u64_lut.h"
+#include "id_vector.h"
+
 #include "u64_to_u64.c"
 #include "u64_to_ptr.c"
 #include "methods.c"
@@ -17,4 +20,5 @@
 
 #include "pid_lookup.c"
 #include "pid_to_vec4.c"
-
+#include "u64_lut.c"
+#include "id_vector.c"

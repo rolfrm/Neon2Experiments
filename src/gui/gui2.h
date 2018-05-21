@@ -22,3 +22,7 @@ pid gui_get_child(pid object, u64 * index);
 pobject gui_new_object();
 void gui_child_add(pid object, u64 child);
 void gui_child_remove(pid object, u64 child);
+
+typedef void (* command_executor)(u64 id, const char * command);
+void console_register_handler(u64 * id, command_executor exec);
+void * get_context_object(module_data * constptr, size_t size);

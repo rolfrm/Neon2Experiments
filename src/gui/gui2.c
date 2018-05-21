@@ -8,6 +8,7 @@
 #include "windows.h"
 #include "u64_to_u64.h"
 #include "u64_to_ptr.h"
+#include "u64_lut.h"
 #include "methods.h"
 #include <iron/datastream_server.h>
 #include "utf8.h"
@@ -15,7 +16,7 @@
 #include "gui2.h"
 #include "pid_to_vec4.h"
 #include "pid_lookup.h"
-
+#include "id_vector.h"
 u32 gui_render_window;
 
 data_stream ui_log = {.name = "2UI"};
@@ -220,6 +221,90 @@ static void _log_print(const data_stream * stream, const void * _data, size_t _l
   fwrite(_data, 1, _length, stdout);
 }
 void init_game();
+
+void * get_context_object(module_data * constptr, size_t size){
+
+  void * data = get_module_data(constptr);
+  if(data == NULL)
+    set_module_data(constptr, (data = alloc0(size)));
+  
+  return data;
+}
+
+static data_stream console_log = {.name = "Console"};
+
+typedef struct{
+  u64 console_id;
+}console_ctx_data;
+
+typedef void (* command_executor)(u64 id, const char * command);
+
+typedef struct{
+  u64_lut * console_handlers;
+  id_vector * ids;
+  console_ctx_data * ctx_data;
+  u64_to_ptr * command_executors;
+}console_ctx;
+static void console_base_handler(u64 id, const char * command);
+
+
+
+console_ctx * get_console_ctx(){
+static module_data _ctx = {0};
+  console_ctx * ctx = get_context_object(&_ctx, sizeof(console_ctx));
+  if(ctx->console_handlers == NULL){
+    ctx->console_handlers = u64_lut_create(NULL);
+    ctx->ids = id_vector_create("console_ids");
+    icy_mem * mem = icy_mem_create("console_ctx_data");
+    icy_mem_realloc(mem, sizeof(console_ctx_data));
+    ctx->ctx_data = mem->ptr;
+    ctx->command_executors = u64_to_ptr_create(NULL);
+    if(ctx->ctx_data->console_id == 0){
+      id_vector_alloc(ctx->ids);
+      var newid = id_vector_alloc(ctx->ids).index;
+      dmsg(ui_log,"Loading new console id: %i\n", newid);
+      ctx->ctx_data->console_id = newid;
+    }else{
+      dmsg(ui_log,"Reusing old console id: %i\n", ctx->ctx_data->console_id);
+    }
+    u64_to_ptr_set(ctx->command_executors, ctx->ctx_data->console_id, (void* ) console_base_handler);
+    u64_lut_set(ctx->console_handlers, ctx->ctx_data->console_id);
+  }
+  return ctx;
+}
+
+void console_register_handler(u64 * id, command_executor exec){
+  var ctx = get_console_ctx();
+  if(*id == 0){
+    *id = id_vector_alloc(ctx->ids).index;
+  }
+  u64_to_ptr_set(ctx->command_executors, *id, (void* ) exec);
+  u64_lut_set(ctx->console_handlers, *id);
+}
+
+static void console_base_handler(u64 id, const char * command){
+  UNUSED(id);
+  dmsg(console_log, "%s", command);
+  if(string_startswith(command, "intern ")){
+    dmsg(console_log, "Interning: %s -> %i\n", command + 7, intern_string(command + 7));
+  }
+}
+
+static void console_handler_fcn(datastream_server * srv, const char * message, void * userdata){
+  
+  UNUSED(srv);
+  UNUSED(userdata);
+  var ctx = get_console_ctx();
+  for(u64 i = 0; i < ctx->console_handlers->count; i++){
+    u64 id = ctx->console_handlers->key[i + 1];
+    command_executor ce = NULL;
+    u64_to_ptr_try_get(ctx->command_executors, &id, (void *)&ce);
+    if(ce != NULL){
+      ce(id, message);
+    }
+  }
+}
+
 void gui_init_module(){
   gui_render_window = intern_string("gui/render");
 
@@ -232,23 +317,23 @@ void gui_init_module(){
   
   init_game();
   
-  //var ds = datastream_server_run();
-  //datastream_server_wait_for_connect(ds);
+  var ds = datastream_server_run();
+  datastream_server_set_console_handler(ds, console_handler_fcn, NULL);
+  datastream_server_wait_for_connect(ds);
+
 }
 
 window_data * get_window_ctx(){
-  static module_data ctx_holder2 = {0};
-  window_data * window_data = get_module_data(&ctx_holder2);
+static module_data ctx_holder2 = {0};
+window_data * window_data = get_context_object(&ctx_holder2, sizeof(window_data[0]));
   dmsg(ui_verbose_log,"rendering windows..\n");
-  if(window_data == NULL){
-    window_data = alloc0(sizeof(window_data[0]));
+  if(window_data->window_vector == NULL){
     window_data->window_vector = windows_create(NULL);
     window_data->window_table = pid_lookup_create(NULL);
     window_data->children = u64_to_u64_create(NULL);
     window_data->window_ctx = u64_to_ptr_create(NULL);
     window_data->background_color = pid_to_vec4_create(NULL);
     ((bool *)&(window_data->children->is_multi_table))[0] = true;
-    set_module_data(&ctx_holder2, window_data);
     dmsg(ui_log,"Created windows holder\n");
     set_method((size_t)&window_class, render_method, (method) on_window_class_render);
     gui_new_object();
