@@ -37,6 +37,7 @@ gl_context_data * get_or_init_context(){
   gl_context_data * ctx = get_module_data(&ctx_holder);
   if(!ctx){
     logd("Creating a new context\n");
+    glfwSwapInterval(0);
     ctx = alloc0(sizeof(ctx[0]));
     set_module_data(&ctx_holder, ctx);
     if(!glfw_inited){
