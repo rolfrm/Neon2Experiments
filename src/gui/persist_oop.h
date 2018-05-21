@@ -1,3 +1,7 @@
+typedef u64 pid;
+typedef u64 pobject;
+typedef u64 pclass;
+
 method _get_method(u64 class_id, u64 method_id);
 void _set_method(u64  class_id, u64 method_id, method m);
 #define get_method(class, method) _get_method(class, (size_t)&method)
