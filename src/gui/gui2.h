@@ -18,3 +18,7 @@ extern pobject render_method;
 pobject create_window(float width, float height, const char * title);
 vec4 gui_get_background(pid object);
 void gui_set_background(pid object, vec4 color);
+pid gui_get_child(pid object, u64 * index);
+pobject gui_new_object();
+void gui_child_add(pid object, u64 child);
+void gui_child_remove(pid object, u64 child);

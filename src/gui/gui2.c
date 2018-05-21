@@ -6,7 +6,6 @@
 #include "gl/gl_module.h"
 #include "gl/gl_utils.h"
 #include "windows.h"
-#include "window_table.h"
 #include "u64_to_u64.h"
 #include "u64_to_ptr.h"
 #include "methods.h"
@@ -14,7 +13,8 @@
 #include "utf8.h"
 #include "persist_oop.h"
 #include "gui2.h"
-#include "gui/pid_to_vec4.h"
+#include "pid_to_vec4.h"
+#include "pid_lookup.h"
 
 u32 gui_render_window;
 
@@ -23,7 +23,7 @@ data_stream ui_verbose_log = {.name = "UI Verbose"};
 
 typedef struct {
   windows * window_vector;
-  window_table * window_table;
+  pid_lookup * window_table;
   u64_to_ptr * window_ctx;
   u64_to_u64 * children;
 
@@ -124,6 +124,23 @@ void on_window_class_render(u64 win_id){
   logd("Rendering class.. %i\n", win_id);
 }
 
+void gui_child_add(pid object, u64 child){
+  var win_ctx = get_window_ctx();
+  u64_to_u64_set(win_ctx->children, object, child);
+}
+
+void gui_child_remove(pid object, u64 child){
+  UNUSED(object);UNUSED(child);
+  ASSERT(false);
+}
+
+pid gui_next_child(pid object, u64 * index){
+  var win_ctx = get_window_ctx();
+  u64 id = 0;
+  u64_to_u64_iter(win_ctx->children, &object, 1, NULL, &id, 1, index);
+  return id;
+}
+
 void on_window_render(u64 win_id){
   var win = get_glfw_window(win_id);
   dmsg(ui_verbose_log, "Rendering.. %i\n", win_id);
@@ -135,17 +152,28 @@ void on_window_render(u64 win_id){
   glClear(GL_COLOR_BUFFER_BIT);
   
   CALL_BASE(win_id, render_method, 0);
+  u64 index = 0;
+  pid child = 0;
+  while((child = gui_next_child(win_id, &index)) != 0){
+    CALL_METHOD(child, render_method, 0);
+  }
   glfwSwapBuffers(win);
   
+}
+
+pobject gui_new_object(){
+  var win_ctx = get_window_ctx();
+  var idx = windows_alloc(win_ctx->window_vector);
+  return idx.index;
 }
 
 pobject create_window(float width, float height, const char * title){
   var win_ctx = get_window_ctx();
   GLFWwindow * window = module_create_window(width, height, title);
-  var idx = windows_alloc(win_ctx->window_vector);
-  set_baseclass(idx.index, window_class);
-  window_table_set(win_ctx->window_table, idx);
-  u64_to_ptr_set(win_ctx->window_ctx, idx.index, window);
+  var idx = gui_new_object();
+  set_baseclass(idx, window_class);
+  pid_lookup_set(win_ctx->window_table, idx);
+  u64_to_ptr_set(win_ctx->window_ctx, idx, window);
 
   glfwSetWindowPosCallback(window, window_pos_callback);
   glfwSetWindowSizeCallback(window, window_size_callback);
@@ -156,9 +184,9 @@ pobject create_window(float width, float height, const char * title){
   glfwSetWindowCloseCallback(window, window_close_callback);
   glfwSetCharCallback(window, char_callback);
   glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
-  set_method(idx.index, render_method, (method) on_window_render);
+  set_method(idx, render_method, (method) on_window_render);
 
-  return idx.index;
+  return idx;
 }
 
 /*static void win_pos_update(u64 win_id, int x, int y){
@@ -178,7 +206,7 @@ static void pre_render_scene(){
   }
 
   for(u64 i = 0; i < wind->window_table->count; i++){
-    CALL_METHOD(wind->window_table->id[i + 1].index, render_method, 0);
+    CALL_METHOD(wind->window_table->key[i + 1], render_method, 0);
   }
   
 }
@@ -217,7 +245,7 @@ window_data * get_window_ctx(){
   if(window_data == NULL){
     window_data = alloc0(sizeof(window_data[0]));
     window_data->window_vector = windows_create(NULL);
-    window_data->window_table = window_table_create(NULL);
+    window_data->window_table = pid_lookup_create(NULL);
     window_data->children = u64_to_u64_create(NULL);
     window_data->window_ctx = u64_to_ptr_create(NULL);
     window_data->background_color = pid_to_vec4_create(NULL);
