@@ -248,9 +248,6 @@ void load_window(u64 id){
   insert_window_state(&id, &w, 1);
 }
 
-
-
-
 GLFWwindow * find_glfw_window(u64 id){
   
   for(u32 i = 0; i < windows.cnt; i++){

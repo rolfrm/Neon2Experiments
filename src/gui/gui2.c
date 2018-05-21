@@ -6,73 +6,31 @@
 #include "gl/gl_module.h"
 #include "gl/gl_utils.h"
 #include "windows.h"
-#include "windows.c"
 #include "window_table.h"
-#include "window_table.c"
 #include "u64_to_u64.h"
-#include "u64_to_u64.c"
-
 #include "u64_to_ptr.h"
-#include "u64_to_ptr.c"
-
 #include "methods.h"
-#include "methods.c"
-
 #include <iron/datastream_server.h>
 #include "utf8.h"
-
+#include "persist_oop.h"
 u32 gui_render_window;
 
 static data_stream ui = {.name = "2UI"};
 static data_stream ui_verbose = {.name = "UI Verbose"};
-
-typedef struct{
-
-  int prog;
-  int color_loc, tex_loc, mode_loc;
-  int offset_loc, size_loc, window_size_loc, uv_offset_loc, uv_size_loc;
-}rectangle_shader;
-
 
 typedef struct {
   windows * window_vector;
   window_table * window_table;
   u64_to_ptr * window_ctx;
   u64_to_u64 * children;
-  u64_to_u64 * baseclass;
-  methods * methods;
 
   bool init_dbg;
 
-  bool demo_loaded;
-  rectangle_shader rect;
-  vec2 center_pos;
-  windows_index win;
+
 }window_data;
 
   
-method _get_method(u64 class_id, u64 method_id);
-void _set_method(u64  class_id, u64 method_id, method m);
-#define get_method(class, method) _get_method(class, (size_t)&method)
-#define set_method(class, method, impl) _set_method(class, (size_t)&method, impl)
 window_data * get_window_ctx();
-
-method _get_method(u64 class_id, u64 method_id){
-  var ctx = get_window_ctx();
-  method m;
-  method_key key = {.method = method_id, .class = class_id};
-  if(methods_try_get(ctx->methods, &key, &m))
-    return m;
-  return NULL;
-}
-
-void _set_method(u64  class_id, u64 method_id, method m){
-  var ctx = get_window_ctx();
-  method_key key = {.method = method_id, .class = class_id};
-  methods_set(ctx->methods, key, m);
-}
-
-
 
 u64 get_window_id(GLFWwindow * glwindow){
   var ctx = get_window_ctx();
@@ -82,39 +40,6 @@ u64 get_window_id(GLFWwindow * glwindow){
   }
   return 0;
 }
-
-#define get_method(class, method) _get_method(class, (size_t)&method)
-#define set_method(class, method, impl) _set_method(class, (size_t)&method, impl)
-
-u64 get_baseclass(u64 item, u64 * index){
-  var ctx = get_window_ctx();
-  u64 _index;
-  if(u64_to_u64_iter(ctx->baseclass, &item, 1, NULL, &_index, 1, index) == 0)
-    return 0;
-  return ctx->baseclass->value[_index];
-}
-
-void _set_baseclass(u64 item, u64 class){
-  var ctx = get_window_ctx();
-  u64_to_u64_set(ctx->baseclass, item, class);
-}
-
-#define set_baseclass(item, class) _set_baseclass(item, (size_t)&class);
-
-#define CALL_BASE(Item, Method, ...)\
-  ({\
-    u64 index = 0, base = 0;\
-    while(0 != (base = get_baseclass(Item, &index))){	\
-      method m = get_method(base, Method);		\
-      if(m != NULL) m(Item, __VA_ARGS__);		\
-    }							\
-  })
-
-#define CALL_METHOD(Item, Method, ...)\
-  ({\
-    method m1 = get_method(Item, Method);	\
-    if(m1 != NULL) m1(Item, __VA_ARGS__);		\
-  })
 
 u64 window_class;
 
@@ -203,13 +128,14 @@ windows_index create_window(float width, float height, const char * title){
 
   return idx;
 }
-static void win_pos_update(u64 win_id, int x, int y){
+
+/*static void win_pos_update(u64 win_id, int x, int y){
   logd("id: %i Pos: %i %i\n", win_id, x, y);
 }
 
 static void cursor_pos_update(u64 win_id, double x, double y){
   logd("Cursor id: %i Pos: %f %f\n", win_id, x, y);
-}
+  }*/
 
 static void pre_render_scene(){
   
@@ -223,14 +149,49 @@ static void pre_render_scene(){
     CALL_METHOD(wind->window_table->id[i + 1].index, render_method, 0);
   }
   
-  GLFWwindow * ptr;
-  if(!wind->demo_loaded){
-    wind->demo_loaded = true;
-    wind->win = create_window(512,512,"GUI2");
+}
 
-    ASSERT(u64_to_ptr_try_get(wind->window_ctx, &(wind->win.index), (void *) &ptr));
-    glfwMakeContextCurrent(ptr);
-    int r_vs = compileShaderFromFile(GL_VERTEX_SHADER, "rect_shader.vs");
+//GLFWwindow 
+
+//void update_activity(const data_stream * stream, const void * _data, size_t _length, void * userdata){
+
+//}
+
+static void _log_print(const data_stream * stream, const void * _data, size_t _length, void * userdata){
+  UNUSED(stream);UNUSED(_data);UNUSED(_length);UNUSED(userdata);
+  fwrite(_data, 1, _length, stdout);
+}
+
+typedef struct{
+
+  int prog;
+  int color_loc, tex_loc, mode_loc;
+  int offset_loc, size_loc, window_size_loc, uv_offset_loc, uv_size_loc;
+}rectangle_shader;
+
+typedef struct{
+  bool demo_loaded;
+  rectangle_shader rect;
+  vec2 center_pos;
+  windows_index win;
+}demo_data;
+
+demo_data * get_demo_ctx(){
+  static module_data ctx_holder = {0};
+  demo_data * demo_data = get_module_data(&ctx_holder);
+  if(demo_data == NULL){
+    demo_data = alloc0(sizeof(demo_data[0]));
+    set_module_data(&ctx_holder, demo_data);
+  }
+  return demo_data;
+}
+/*
+void render_demo(u64 win){
+  var dd = get_demo_ctx();
+  if(!dd->demo_loaded){
+    dd->demo_loaded = true;
+  
+  int r_vs = compileShaderFromFile(GL_VERTEX_SHADER, "rect_shader.vs");
     int r_fs = compileShaderFromFile(GL_FRAGMENT_SHADER, "rect_shader.fs");
 
     rectangle_shader rect;
@@ -248,21 +209,18 @@ static void pre_render_scene(){
     rect.window_size_loc = loc("window_size");
     rect.uv_offset_loc = loc("uv_offset");
     rect.uv_size_loc = loc("uv_size");
-    wind->rect = rect;
-    wind->center_pos = vec2_new(5,6);
-    wind->demo_loaded = true;
+    dd->rect = rect;
+    dd->center_pos = vec2_new(5,6);
+    dd->demo_loaded = true;
 
-    set_method(wind->win.index, window_pos_method, (method)win_pos_update);
-    set_method(wind->win.index, mouse_over_method, (method)cursor_pos_update);
+    set_method(dd->win.index, window_pos_method, (method)win_pos_update);
+    set_method(dd->win.index, mouse_over_method, (method)cursor_pos_update);
     
   }else{
     ASSERT(u64_to_ptr_try_get(wind->window_ctx, &(wind->win.index), (void *)&ptr));
     glfwMakeContextCurrent(ptr);
   }
 
-
-  
-  
   {
     
     rectangle_shader rect = wind->rect;
@@ -290,17 +248,11 @@ static void pre_render_scene(){
     
 
   }
-}
+  }*/
 
-//GLFWwindow 
-
-//void update_activity(const data_stream * stream, const void * _data, size_t _length, void * userdata){
-
-//}
-
-static void _log_print(const data_stream * stream, const void * _data, size_t _length, void * userdata){
-  UNUSED(stream);UNUSED(_data);UNUSED(_length);UNUSED(userdata);
-  fwrite(_data, 1, _length, stdout);
+void init_demo(){
+  var dd = get_demo_ctx();
+  dd->win = create_window(512,512,"GUI2");
 }
 
 void gui_init_module(){
@@ -312,6 +264,8 @@ void gui_init_module(){
   data_stream_listener * l1 = alloc0(sizeof(*l1));
   l1->process = _log_print;
   data_stream_listen(l1, &ui);
+  
+  init_demo();
   
   //var ds = datastream_server_run();
   //datastream_server_wait_for_connect(ds);
@@ -328,13 +282,9 @@ window_data * get_window_ctx(){
     window_data->children = u64_to_u64_create(NULL);
     window_data->window_ctx = u64_to_ptr_create(NULL);
     ((bool *)&(window_data->children->is_multi_table))[0] = true;
-    window_data->baseclass = u64_to_u64_create(NULL);
-    ((bool *)&(window_data->baseclass->is_multi_table))[0] = true;
-    window_data->methods = methods_create(NULL);
     set_module_data(&ctx_holder2, window_data);
     dmsg(ui,"Created windows holder\n");
     set_method((size_t)&window_class, render_method, (method) on_window_class_render);
-
   }
   return window_data;
 }
