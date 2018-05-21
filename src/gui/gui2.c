@@ -40,6 +40,7 @@ u64 get_window_id(GLFWwindow * glwindow){
     if(ctx->window_ctx->value[i + 1] == glwindow)
       return ctx->window_ctx->key[i + 1];
   }
+  ERROR("Unable to find window");
   return 0;
 }
 
@@ -120,11 +121,8 @@ void window_close_callback(GLFWwindow * glwindow){
   CALL_METHOD(win_id, window_close_method, 0);
 }
 
-void on_window_class_render(u64 win_id){
-  logd("Rendering class.. %i\n", win_id);
-}
-
 void gui_child_add(pid object, u64 child){
+  ASSERT(object != child);
   var win_ctx = get_window_ctx();
   u64_to_u64_set(win_ctx->children, object, child);
 }
@@ -136,12 +134,12 @@ void gui_child_remove(pid object, u64 child){
 
 pid gui_next_child(pid object, u64 * index){
   var win_ctx = get_window_ctx();
-  u64 id = 0;
-  u64_to_u64_iter(win_ctx->children, &object, 1, NULL, &id, 1, index);
-  return id;
+  u64 idx = 0;
+  u64_to_u64_iter(win_ctx->children, &object, 1, NULL, &idx, 1, index);
+  return win_ctx->children->value[idx];
 }
 
-void on_window_render(u64 win_id){
+void on_window_class_render(u64 win_id){
   var win = get_glfw_window(win_id);
   dmsg(ui_verbose_log, "Rendering.. %i\n", win_id);
   
@@ -151,7 +149,7 @@ void on_window_render(u64 win_id){
   glClearColor(bg.x,bg.y,bg.z,bg.w);
   glClear(GL_COLOR_BUFFER_BIT);
   
-  CALL_BASE(win_id, render_method, 0);
+  //CALL_BASE(win_id, render_method, 0);
   u64 index = 0;
   pid child = 0;
   while((child = gui_next_child(win_id, &index)) != 0){
@@ -184,8 +182,6 @@ pobject create_window(float width, float height, const char * title){
   glfwSetWindowCloseCallback(window, window_close_callback);
   glfwSetCharCallback(window, char_callback);
   glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
-  set_method(idx, render_method, (method) on_window_render);
-
   return idx;
 }
 
@@ -206,7 +202,9 @@ static void pre_render_scene(){
   }
 
   for(u64 i = 0; i < wind->window_table->count; i++){
-    CALL_METHOD(wind->window_table->key[i + 1], render_method, 0);
+    pid obj = wind->window_table->key[i + 1];
+    
+    CALL_BASE(obj, render_method, 0);
   }
   
 }
@@ -253,6 +251,7 @@ window_data * get_window_ctx(){
     set_module_data(&ctx_holder2, window_data);
     dmsg(ui_log,"Created windows holder\n");
     set_method((size_t)&window_class, render_method, (method) on_window_class_render);
+    gui_new_object();
   }
   return window_data;
 }

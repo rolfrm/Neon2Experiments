@@ -24,5 +24,6 @@ void _set_baseclass(u64 item, u64 class);
   ({\
     method m1 = get_method(Item, Method);	\
     if(m1 != NULL) m1(Item, __VA_ARGS__);		\
+    else CALL_BASE(Item, Method, __VA_ARGS__);			\
   })
 
