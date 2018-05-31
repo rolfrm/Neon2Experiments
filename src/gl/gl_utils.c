@@ -9,6 +9,7 @@
 #include <iron/mem.h>
 #include <iron/fileio.h>
 #include <iron/utils.h>
+#include <iron/linmath.h>
 //#include "stb_image.h"
 #include "gl_utils.h"
 /*
@@ -220,4 +221,12 @@ void debugglcalls(GLenum source,
 
 void gl_init_debug_calls(){
   glDebugMessageCallback(debugglcalls, NULL);
+}
+
+void glUniformVec2(u32 uniform, vec2 v){
+  glUniform2f(uniform, v.x, v.y);
+}
+
+void glUniformMat3(u32 uniform_location, mat3 mat){
+  glUniformMatrix3fv(uniform_location, 1, false, &mat.data[0][0]);
 }

@@ -24,6 +24,48 @@ typedef struct{
   int offset_loc, size_loc, window_size_loc, uv_offset_loc, uv_size_loc;
 }rectangle_shader;
 
+typedef struct {
+  int prog;
+  int color_loc, type_loc, img_pos_loc, img_size_loc, tform_loc;
+  int vertex_attr;
+}df_shader;
+
+typedef enum{
+  DF_SHADER_RECT = 0,
+  DF_SHADER_CIRC = 1,
+  DF_SHADER_POLY = 2
+} df_shader_type;
+
+void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, vec2 world_pos, vec2 world_size, mat3 world_to_view){
+  if(shader->prog == 0){
+    int r_vs = compileShaderFromFile(GL_VERTEX_SHADER, "df_shader.vs");
+    int r_fs = compileShaderFromFile(GL_FRAGMENT_SHADER, "df_shader.fs");
+    shader->prog = linkGlProgram(2, r_vs,r_fs);
+    int loc(const char * name){
+      return glGetUniformLocation(shader->prog, name);
+    }
+    shader->color_loc = loc("color");
+    shader->type_loc = loc("type");
+    shader->img_pos_loc = loc("img_pos");
+    shader->img_size_loc = loc("img_size");
+    shader->tform_loc = loc("tform");
+    shader->vertex_attr = 0;
+  }
+  glUseProgram(shader->prog);
+  glUniform4f(shader->color_loc, color.x, color.y, color.z, color.w);
+  glUniform1i(shader->type_loc, type);
+  vec2 world_pos2 = mat3_mul_vec2(world_to_view, world_pos);
+  vec2 world_pos3 = mat3_mul_vec2(world_to_view, vec2_add(world_pos, world_size));
+  vec2 new_size = vec2_sub(world_pos2, world_pos3);
+  glUniformVec2(shader->img_pos_loc, world_pos2);
+  glUniformVec2(shader->img_size_loc, new_size);
+  glUniformMat3(shader->tform_loc, world_to_view);
+}
+
+void df_shader_delete(df_shader * shader){
+  UNUSED(shader);
+}
+
 typedef struct{
   bool initialized;
   vec2 center_pos;
@@ -34,9 +76,11 @@ typedef struct{
   u64 module_id;
   bool demo_loaded;
   rectangle_shader rect;
+  df_shader df_shader;
   demo_global * glob;
   pobject win;
   pobject game_board;
+  u32 quad_buffer;
 }demo_data;
 
 typedef struct {
@@ -126,6 +170,22 @@ static void render_game(u64 thing){
     }
     dd->glob->center_pos = vec2_add(dd->glob->center_pos, vec2_new(randf32() * 0.1 - 0.05, randf32() * 0.1 - 0.05));
   }
+
+  df_shader_configure(&dd->df_shader, vec4_new(1,0,0,0), 0, vec2_new(0,0), vec2_new(0.5, 0.5), mat3_identity());
+  df_shader s = dd->df_shader;
+  if(dd->quad_buffer == 0){
+    glGenBuffers(1, &dd->quad_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, dd->quad_buffer);
+    f32 vertexes[] = {0,0,1,0,0,1,1,1};
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertexes[0]) * 4, vertexes, GL_STATIC_DRAW);
+    dmsg(ui_log, "Loading quad buffer..\n");    
+  }
+  glBindBuffer(GL_ARRAY_BUFFER, dd->quad_buffer);
+  glEnableVertexAttribArray(s.vertex_attr);
+  glVertexAttribPointer(s.vertex_attr, 2, GL_FLOAT, false, 0, 0);
+  glDrawArrays(GL_POINTS, 0, 4);
+  glDisableVertexAttribArray(s.vertex_attr);
+  
 }
 
 
