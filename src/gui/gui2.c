@@ -147,6 +147,10 @@ void on_window_class_render(u64 win_id){
   var bg = gui_get_background(win_id);
   
   glfwMakeContextCurrent(win);
+
+  int width, height;
+  glfwGetWindowSize(win, &width, &height);
+  glViewport(0, 0, width, height);
   glClearColor(bg.x,bg.y,bg.z,bg.w);
   glClear(GL_COLOR_BUFFER_BIT);
   
