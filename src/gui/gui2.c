@@ -310,6 +310,10 @@ static void console_handler_fcn(datastream_server * srv, const char * message, v
 }
 
 void gui_init_module(){
+  var ds = datastream_server_run();
+  datastream_server_set_console_handler(ds, console_handler_fcn, NULL);
+  datastream_server_wait_for_connect(ds);
+  
   gui_render_window = intern_string("gui/render");
 
   register_method(gui_render_window, pre_render_scene);
@@ -321,9 +325,7 @@ void gui_init_module(){
   
   init_game();
   
-  var ds = datastream_server_run();
-  datastream_server_set_console_handler(ds, console_handler_fcn, NULL);
-  datastream_server_wait_for_connect(ds);
+
 
 }
 

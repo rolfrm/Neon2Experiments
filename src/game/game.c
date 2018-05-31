@@ -25,10 +25,16 @@ typedef struct{
 }rectangle_shader;
 
 typedef struct{
+  bool initialized;
+  vec2 center_pos;
+  
+}demo_global;
+
+typedef struct{
   u64 module_id;
   bool demo_loaded;
   rectangle_shader rect;
-  vec2 center_pos;
+  demo_global * glob;
   pobject win;
   pobject game_board;
 }demo_data;
@@ -55,6 +61,12 @@ static engine_context * get_engine_context(){
   
 }
 
+void * icy_mem_create_sized(const char * name, size_t size){
+  icy_mem * mem = icy_mem_create(name);
+  icy_mem_realloc(mem, size);
+  return mem->ptr;
+}
+
 
 static void render_game(u64 thing){
   var game_ctx = get_engine_context();
@@ -64,10 +76,10 @@ static void render_game(u64 thing){
   ASSERT(u64_to_ptr_try_get(game_ctx->games, &game_id, (void **) &dd));
   if(!dd->demo_loaded){
     dd->demo_loaded = true;
-  
+
     int r_vs = compileShaderFromFile(GL_VERTEX_SHADER, "rect_shader.vs");
     int r_fs = compileShaderFromFile(GL_FRAGMENT_SHADER, "rect_shader.fs");
-
+    
     rectangle_shader rect;
     rect.prog = linkGlProgram(2, r_vs,r_fs);
     glDeleteShader(r_vs);
@@ -84,7 +96,10 @@ static void render_game(u64 thing){
     rect.uv_offset_loc = loc("uv_offset");
     rect.uv_size_loc = loc("uv_size");
     dd->rect = rect;
-    dd->center_pos = vec2_new(5,6);
+    if(dd->glob->initialized == false){
+      dd->glob->center_pos = vec2_new(5,6);
+      dd->glob->initialized = true;
+    }
     dd->demo_loaded = true;
   }
 
@@ -97,7 +112,7 @@ static void render_game(u64 thing){
     glUniform4f(rect.color_loc, 1,0,0,0);
 
     glUniform2f(rect.size_loc, 1, 1);
-    vec2 center = dd->center_pos;
+    vec2 center = dd->glob->center_pos;
     
     for(int i = 0; i < 10; i++){
       for(int j = 0; j < 10; j++){
@@ -105,11 +120,11 @@ static void render_game(u64 thing){
 	vec2 pos = vec2_new(i,j);
 	glUniform4f(rect.color_loc, 1,vec2_len(vec2_sub(pos, center)) * 0.1,0.2,0.3);	
 	glUniform2f(rect.offset_loc, pos.x, pos.y);	
-	//glDrawArrays(GL_TRIANGLE_STRIP,0,4);	
+	glDrawArrays(GL_TRIANGLE_STRIP,0,4);	
 	
       }
     }
-    dd->center_pos = vec2_add(dd->center_pos, vec2_new(randf32() * 0.1 - 0.05, randf32() * 0.1 - 0.05));
+    dd->glob->center_pos = vec2_add(dd->glob->center_pos, vec2_new(randf32() * 0.1 - 0.05, randf32() * 0.1 - 0.05));
   }
 }
 
@@ -119,30 +134,33 @@ typedef struct {
   u64_to_ptr * modules;
 }game_context;
 
+void load_game_id(u64 new_game_id){
+  var ectx = get_engine_context();
+  game_context * new_game_ctx = alloc0(sizeof(game_context));
+
+  new_game_ctx->module_ids = id_vector_create(quickfmt("game/%i/module_ids", new_game_id));
+  u64_to_ptr_set(ectx->games, new_game_id, new_game_ctx);
+  
+  dmsg(ui_log, "Loading game... %i\n", new_game_id);
+    
+  demo_data * dd = alloc0(sizeof(dd[0]));
+  ASSERT(sizeof(dd[0]) == sizeof(demo_data));    
+  dd->win = create_window(512,512,"GUI2");
+  dd->glob = icy_mem_create_sized(quickfmt("game/%i/glob", new_game_id), sizeof(dd->glob[0]));
+  gui_set_background(dd->win, vec4_new(0.3,0.4,0.2,1.0));
+  dd->game_board = gui_new_object();
+  u64_to_u64_set(ectx->game_windows, dd->game_board, new_game_id);
+  set_method(dd->game_board, render_method, (method) render_game);
+  gui_child_add(dd->win, dd->game_board);
+  u64_to_ptr_set(ectx->games, new_game_id, dd);
+}
 
 static void game_loader(u64 id, const char * command){
   UNUSED(id);
+  var ectx = get_engine_context();
   if(string_startswith(command, "load-game")){
-
-    var ectx = get_engine_context();
-    
-    u64 new_game_id = id_vector_alloc(ectx->game_ids).index;
-    game_context * new_game_ctx = alloc0(sizeof(game_context));
-
-    new_game_ctx->module_ids = id_vector_create(quickfmt("game/%i/module_ids", new_game_id));
-    u64_to_ptr_set(ectx->games, new_game_id, new_game_ctx);
-
-    dmsg(ui_log, "Loading game... %i\n", new_game_id);
-
-    demo_data * dd = alloc0(sizeof(dd[0]));
-    ASSERT(sizeof(dd[0]) == sizeof(demo_data));    
-    dd->win = create_window(512,512,"GUI2");
-    gui_set_background(dd->win, vec4_new(0.3,0.4,0.2,1.0));
-    dd->game_board = gui_new_object();
-    u64_to_u64_set(ectx->game_windows, dd->game_board, new_game_id);
-    set_method(dd->game_board, render_method, (method) render_game);
-    gui_child_add(dd->win, dd->game_board);
-    u64_to_ptr_set(ectx->games, new_game_id, dd);
+     u64 new_game_id = id_vector_alloc(ectx->game_ids).index;
+     load_game_id(new_game_id);
   }
 }
 
@@ -150,4 +168,9 @@ void init_game(){
   var game_ctx = get_engine_context();
   
   console_register_handler(game_ctx->module_id, game_loader);
+  for(size_t i = 0; i < game_ctx->game_ids->count[0]; i++){
+    load_game_id(i);    
+  }
+  logd("loading context..\n");
+  dmsg(ui_log, "Loading %i contexts\n", game_ctx->game_ids->count[0]);
 }
