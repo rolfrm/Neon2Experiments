@@ -8,6 +8,7 @@
 #include <iron/log.h>
 #include <iron/mem.h>
 #include <iron/utils.h>
+#include <iron/datastream.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -24,12 +25,23 @@ typedef struct{
   GLFWwindow * window;
 
 }gl_context_data;
+static data_stream gl_debug_high = {.name = "gl_high"};
+static data_stream glfw_debug = {.name = "GLFW Error"};
 
-void glfwError(int x, const char * err){
+static void glfwError(int x, const char * err){
+  dmsg(glfw_debug,"%s", err);
   ERROR("%i %s", x, err);
 }
 
 
+static void neon_gl_debug_callback(u32 source, u32 type, u32 id, u32 severity, int length, const char * message, const void * userdata){
+  UNUSED(source);
+  UNUSED(type);
+  UNUSED(id);
+  UNUSED(severity);
+  UNUSED(userdata);
+  dlog(gl_debug_high,message, length);
+}
 
 gl_context_data * get_or_init_context(){
   static module_data ctx_holder;
@@ -61,6 +73,8 @@ gl_context_data * get_or_init_context(){
     ctx->window = window;
     glfwMakeContextCurrent(window);
     glewInit();
+    glDebugMessageCallback(neon_gl_debug_callback, NULL);
+    glEnable(GL_DEBUG_OUTPUT);
   }
   return ctx;
 }
@@ -72,6 +86,9 @@ GLFWwindow * module_create_window(int width, int height, const char * title){
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
   glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
   GLFWwindow * window = glfwCreateWindow(width, height, title, NULL, ctx->window);
+  glfwMakeContextCurrent(window);
+  glDebugMessageCallback(neon_gl_debug_callback, NULL);
+  glEnable(GL_DEBUG_OUTPUT);
   return window;
 }
 
