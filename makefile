@@ -6,7 +6,7 @@ TARGET = nth.so
 LIB_OBJECTS =$(LIB_SOURCES:src/%.c=obj/%.o)
 
 LDFLAGS= -L. $(OPT) -Wextra #-lmcheck #-ftlo #setrlimit on linux 
-LIBS= -ldl -lm  -lpthread -liron -lGL -lGLEW -lglfw -ldatastream_server
+LIBS= -ldl -lm  -lpthread -liron -lGL -lGLEW -lglfw -ldatastream_server -lxxhash
 ALL= $(TARGET) 
 CFLAGS = -Iinclude -Isrc -std=c11 -c $(OPT) -D_GNU_SOURCE -Wall -Wextra -Werror=implicit-function-declaration -Wformat=0  -fdiagnostics-color -Wextra -Werror -Wwrite-strings -fbounds-check -fPIC  #-DDEBUG
 

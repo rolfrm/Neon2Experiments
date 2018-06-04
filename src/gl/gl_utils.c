@@ -10,6 +10,9 @@
 #include <iron/fileio.h>
 #include <iron/utils.h>
 #include <iron/linmath.h>
+#include <iron/time.h>
+#include <iron/datastream.h>
+#include <xxhash.h>
 //#include "stb_image.h"
 #include "gl_utils.h"
 /*
@@ -116,6 +119,7 @@ u32 loadImagefx(float * pixels, u32 width, u32 height, u32 channels, int interp)
 }
 */
 
+data_stream gl_verbose = {.name = "GL Verbose"};
 
 u32 compileShader(int program, const char * code){
   u32 ss = glCreateShader(program);
@@ -150,23 +154,13 @@ u32 compileShaderFromFile(u32 gl_prog_type, const char * filepath){
 u32 createShaderFromFiles(const char * vs_path, const char * fs_path){
   u32 vs = compileShaderFromFile(GL_VERTEX_SHADER, vs_path);
   u32 fs = compileShaderFromFile(GL_FRAGMENT_SHADER, fs_path);
-  u32 result = linkGlProgram(2, vs, fs);
+  u32 result = linkGlProgramv(2, vs, fs);
   return result;
 }
 
-u32 linkGlProgram(u32 shader_cnt, ...){
-  u32 shaders[shader_cnt];
-
-  { // read arglist
-    va_list arglist;
-    va_start (arglist, shader_cnt);
-    for(u32 i = 0; i < shader_cnt; i++)
-      shaders[i] = va_arg(arglist, u32);
-    
-    va_end(arglist);
-  }
 
 
+u32 linkGlProgram(u32 shader_cnt, int * shaders){
   u32 prog = glCreateProgram();
   for(u32 i = 0; i < shader_cnt; i++){
     glAttachShader(prog, shaders[i]);
@@ -185,10 +179,73 @@ u32 linkGlProgram(u32 shader_cnt, ...){
       glGetProgramInfoLog(prog, 1024, &loglen, buffer);
       logd("%s", buffer);
       dealloc(buffer);
-    // Write the error to a log
+      // Write the error to a log
     }
-  
   return prog;
+}
+
+u32 linkGlProgramv(u32 shader_cnt, ...){
+  int shaders[shader_cnt];
+
+  { // read arglist
+    va_list arglist;
+    va_start (arglist, shader_cnt);
+    for(u32 i = 0; i < shader_cnt; i++)
+      shaders[i] = va_arg(arglist, u32);
+    
+    va_end(arglist);
+  }
+  return linkGlProgram(shader_cnt, shaders);
+
+}
+
+int compiled_shader(shader_program * prog, ...){
+  XXH64_state_t * hasher = NULL;
+  u64 * hash = prog->hash;
+  int * shaders = prog->shaders;
+  va_list arglist;
+  va_start (arglist, prog);
+  var tstamp = timestampf();
+  int i = 0;
+  bool change = false;
+  while(true){
+    
+    ASSERT(i < 5);
+    u32 shader_type = va_arg(arglist, u32);
+    if(shader_type == 0)
+      break;//
+
+    const char * path = va_arg(arglist, const char *);
+    dmsg(gl_verbose, "recompile ? %f\n", (f64)(tstamp - prog->timestamp));
+    if(shaders[i] != 0 && (tstamp - prog->timestamp) < 1.0)
+      continue;
+    
+    if(hasher == NULL){
+      hasher = XXH64_createState();
+    }
+    XXH64_reset(hasher, 0);
+
+    char * vcode = read_file_to_string(path);
+    ASSERT(vcode != NULL);
+    XXH64_update(hasher, vcode, strlen(vcode));
+    u64 hsh = XXH64_digest(hasher);
+    if(hsh != hash[i]){    
+      shaders[i] = compileShader(shader_type, vcode);
+      hash[i] = hsh;
+      change = true;
+    }
+    dealloc(vcode);
+    i++;
+  }
+  va_end(arglist);
+  if(change){
+    int program = linkGlProgram(i, shaders);
+    prog->program = program;
+  }
+  prog->timestamp = tstamp;
+  if(hasher != NULL)
+    XXH64_freeState(hasher);
+  return change;
 }
 
 void debugglcalls(GLenum source,

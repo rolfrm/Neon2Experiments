@@ -2,6 +2,7 @@
 
 uniform mat3 tform;
 layout(location=0) in vec2 vertex;
+//asd
 
 out vec2 uv;
 void main(){

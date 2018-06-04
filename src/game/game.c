@@ -25,7 +25,7 @@ typedef struct{
 }rectangle_shader;
 
 typedef struct {
-  int prog;
+  shader_program prog;
   int color_loc, type_loc, img_pos_loc, img_size_loc, tform_loc;
   int vertex_attr;
 }df_shader;
@@ -37,12 +37,11 @@ typedef enum{
 } df_shader_type;
 
 void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, vec2 world_pos, vec2 world_size, mat3 world_to_view){
-  if(shader->prog == 0){
-    int r_vs = compileShaderFromFile(GL_VERTEX_SHADER, "df_shader.vs");
-    int r_fs = compileShaderFromFile(GL_FRAGMENT_SHADER, "df_shader.fs");
-    shader->prog = linkGlProgram(2, r_vs,r_fs);
+  if(compiled_shader(&shader->prog, GL_VERTEX_SHADER, "df_shader.vs", GL_FRAGMENT_SHADER, "df_shader.fs", 0)){
+    dmsg(ui_log, "Recompile shader..\n");    
+  
     int loc(const char * name){
-      return glGetUniformLocation(shader->prog, name);
+      return glGetUniformLocation(shader->prog.program, name);
     }
     shader->color_loc = loc("color");
     shader->type_loc = loc("type");
@@ -51,7 +50,7 @@ void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, ve
     shader->tform_loc = loc("tform");
     shader->vertex_attr = 0;
   }
-  glUseProgram(shader->prog);
+  glUseProgram(shader->prog.program);
   glUniform4f(shader->color_loc, color.x, color.y, color.z, color.w);
   glUniform1i(shader->type_loc, type);
   vec2 world_pos2 = mat3_mul_vec2(world_to_view, world_pos);
@@ -125,7 +124,7 @@ static void render_game(u64 thing){
     int r_fs = compileShaderFromFile(GL_FRAGMENT_SHADER, "rect_shader.fs");
     
     rectangle_shader rect;
-    rect.prog = linkGlProgram(2, r_vs,r_fs);
+    rect.prog = linkGlProgramv(2, r_vs,r_fs);
     glDeleteShader(r_vs);
     glDeleteShader(r_fs);
     int loc(const char * name){
