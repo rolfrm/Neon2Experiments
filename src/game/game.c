@@ -27,6 +27,7 @@ typedef struct{
 typedef struct {
   shader_program prog;
   int color_loc, type_loc, img_pos_loc, img_size_loc, tform_loc;
+  int window_size_loc;
   int vertex_attr;
 }df_shader;
 
@@ -36,7 +37,7 @@ typedef enum{
   DF_SHADER_POLY = 2
 } df_shader_type;
 
-void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, vec2 world_pos, vec2 world_size, mat3 world_to_view){
+void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, vec2 world_pos, vec2 world_size, mat3 world_to_view, vec2 window_size){
   if(compiled_shader(&shader->prog, GL_VERTEX_SHADER, "df_shader.vs", GL_FRAGMENT_SHADER, "df_shader.fs", 0)){
     dmsg(ui_log, "Recompile shader..\n");    
   
@@ -48,6 +49,7 @@ void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, ve
     shader->img_pos_loc = loc("img_pos");
     shader->img_size_loc = loc("img_size");
     shader->tform_loc = loc("tform");
+    shader->window_size_loc = loc("window_size");
     shader->vertex_attr = 0;
   }
   glUseProgram(shader->prog.program);
@@ -58,6 +60,7 @@ void df_shader_configure(df_shader * shader, vec4 color, df_shader_type type, ve
   vec2 new_size = vec2_sub(world_pos2, world_pos3);
   glUniformVec2(shader->img_pos_loc, world_pos2);
   glUniformVec2(shader->img_size_loc, new_size);
+  glUniformVec2(shader->window_size_loc, window_size);
   glUniformMat3(shader->tform_loc, world_to_view);
 }
 
@@ -170,19 +173,19 @@ static void render_game(u64 thing){
     dd->glob->center_pos = vec2_add(dd->glob->center_pos, vec2_new(randf32() * 0.1 - 0.05, randf32() * 0.1 - 0.05));
   }
 
-  df_shader_configure(&dd->df_shader, vec4_new(1,0,0,0), 0, vec2_new(0,0), vec2_new(0.5, 0.5), mat3_identity());
+  df_shader_configure(&dd->df_shader, vec4_new(1,0,0,0), 1, vec2_scale(dd->glob->center_pos, 0.1), vec2_new(0.5, 0.5), mat3_identity(), vec2_new(512, 512));
   df_shader s = dd->df_shader;
   if(dd->quad_buffer == 0){
     glGenBuffers(1, &dd->quad_buffer);
     glBindBuffer(GL_ARRAY_BUFFER, dd->quad_buffer);
-    f32 vertexes[] = {0,0,1,0,0,1,1,1};
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertexes[0]) * 4, vertexes, GL_STATIC_DRAW);
+    f32 vertexes[] = {-1,-1,1,-1,-1,1,1,1};
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertexes), vertexes, GL_STATIC_DRAW);
     dmsg(ui_log, "Loading quad buffer..\n");    
   }
   glBindBuffer(GL_ARRAY_BUFFER, dd->quad_buffer);
   glEnableVertexAttribArray(s.vertex_attr);
   glVertexAttribPointer(s.vertex_attr, 2, GL_FLOAT, false, 0, 0);
-  glDrawArrays(GL_POINTS, 0, 4);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glDisableVertexAttribArray(s.vertex_attr);
   
 }
@@ -206,7 +209,7 @@ void load_game_id(u64 new_game_id){
   ASSERT(sizeof(dd[0]) == sizeof(demo_data));    
   dd->win = create_window(512,512,"GUI2");
   dd->glob = icy_mem_create_sized(quickfmt("game/%i/glob", new_game_id), sizeof(dd->glob[0]));
-  gui_set_background(dd->win, vec4_new(0.3,0.4,0.2,1.0));
+  gui_set_background(dd->win, vec4_new(0.0,0.0,0.0,1.0));
   dd->game_board = gui_new_object();
   u64_to_u64_set(ectx->game_windows, dd->game_board, new_game_id);
   set_method(dd->game_board, render_method, (method) render_game);
@@ -218,8 +221,8 @@ static void game_loader(u64 id, const char * command){
   UNUSED(id);
   var ectx = get_engine_context();
   if(string_startswith(command, "load-game")){
-     u64 new_game_id = id_vector_alloc(ectx->game_ids).index;
-     load_game_id(new_game_id);
+    var new_game_id = id_vector_alloc(ectx->game_ids).index;
+    load_game_id(new_game_id);
   }
 }
 

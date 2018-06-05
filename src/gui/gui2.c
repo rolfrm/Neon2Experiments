@@ -142,6 +142,31 @@ pid gui_next_child(pid object, u64 * index){
 
 void on_window_class_render(u64 win_id){
   var win = get_glfw_window(win_id);
+  
+  if(win == NULL){
+    var win_ctx = get_window_ctx();
+    var idx = win_id;
+    int width = 512;
+    int height = 512;
+    const char * title = "Fix me";
+    GLFWwindow * window = module_create_window(width, height, title);
+    u64_to_ptr_set(win_ctx->window_ctx, idx, window);
+    
+    glfwSetWindowPosCallback(window, window_pos_callback);
+    glfwSetWindowSizeCallback(window, window_size_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetWindowCloseCallback(window, window_close_callback);
+    glfwSetCharCallback(window, char_callback);
+    glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
+    win = get_glfw_window(win_id);
+  }
+
+
+
+  
   dmsg(ui_verbose_log, "Rendering.. %i\n", win_id);
   
   var bg = gui_get_background(win_id);
@@ -171,22 +196,13 @@ pobject gui_new_object(){
 }
 
 pobject create_window(float width, float height, const char * title){
+  UNUSED(width);UNUSED(height);UNUSED(title);
   var win_ctx = get_window_ctx();
-  GLFWwindow * window = module_create_window(width, height, title);
+
   var idx = gui_new_object();
   set_baseclass(idx, window_class);
   pid_lookup_set(win_ctx->window_table, idx);
-  u64_to_ptr_set(win_ctx->window_ctx, idx, window);
-
-  glfwSetWindowPosCallback(window, window_pos_callback);
-  glfwSetWindowSizeCallback(window, window_size_callback);
-  glfwSetCursorPosCallback(window, cursor_pos_callback);
-  glfwSetMouseButtonCallback(window, mouse_button_callback);
-  glfwSetKeyCallback(window, key_callback);
-  glfwSetScrollCallback(window, scroll_callback);
-  glfwSetWindowCloseCallback(window, window_close_callback);
-  glfwSetCharCallback(window, char_callback);
-  glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
+  
   return idx;
 }
 
@@ -220,10 +236,7 @@ static void pre_render_scene(){
 
 //}
 
-static void _log_print(const data_stream * stream, const void * _data, size_t _length, void * userdata){
-  UNUSED(stream);UNUSED(_data);UNUSED(_length);UNUSED(userdata);
-  fwrite(_data, 1, _length, stdout);
-}
+
 void init_game();
 
 void * get_context_object(module_data * constptr, size_t size){
@@ -319,9 +332,15 @@ void gui_init_module(){
   register_method(gui_render_window, pre_render_scene);
   register_event(gui_render_window, gl_post_render, false);
 
-  data_stream_listener * l1 = alloc0(sizeof(*l1));
-  l1->process = _log_print;
-  data_stream_listen(l1, &ui_log);
+  if(false){
+    void _log_print(const data_stream * stream, const void * _data, size_t _length, void * userdata){
+      UNUSED(stream);UNUSED(_data);UNUSED(_length);UNUSED(userdata);
+      fwrite(_data, 1, _length, stdout);
+    }
+    data_stream_listener * l1 = alloc0(sizeof(*l1));
+    l1->process = _log_print;
+    data_stream_listen(l1, &ui_log);
+  }
   
   init_game();
   

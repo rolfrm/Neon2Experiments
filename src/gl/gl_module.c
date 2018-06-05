@@ -29,6 +29,7 @@ static data_stream gl_debug_high = {.name = "gl_high"};
 static data_stream glfw_debug = {.name = "GLFW Error"};
 
 static void glfwError(int x, const char * err){
+  UNUSED(x);
   dmsg(glfw_debug,"%s", err);
   ERROR("%i %s", x, err);
 }

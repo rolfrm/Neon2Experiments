@@ -129,22 +129,22 @@ u32 compileShader(int program, const char * code){
   int compileStatus = 0;	
   glGetShaderiv(ss, GL_COMPILE_STATUS, &compileStatus);
   if(compileStatus == 0){
-    logd("Error during shader compilation:");
+    dmsg(gl_verbose, "Error during shader compilation:");
     int loglen = 0;
     glGetShaderiv(ss, GL_INFO_LOG_LENGTH, &loglen);
     char * buffer = alloc0(loglen);
     glGetShaderInfoLog(ss, loglen, NULL, buffer);
 
-    logd("%s", buffer);
+    dmsg(gl_verbose,"%s", buffer);
     dealloc(buffer);
   } else{
-    logd("--- Success\n");
+    dmsg(gl_verbose, "--- Success");
   }
   return ss;
 }
 
 u32 compileShaderFromFile(u32 gl_prog_type, const char * filepath){
-  logd("Compiling shader '%s'\n", filepath);
+  dmsg(gl_verbose,"Compiling shader '%s'\n", filepath);
   char * vcode = read_file_to_string(filepath);
   u32 vs = compileShader(gl_prog_type, vcode);
   dealloc(vcode);
@@ -208,6 +208,7 @@ int compiled_shader(shader_program * prog, ...){
   var tstamp = timestampf();
   int i = 0;
   bool change = false;
+  f64 delta = (tstamp - prog->timestamp);
   while(true){
     
     ASSERT(i < 5);
@@ -216,8 +217,8 @@ int compiled_shader(shader_program * prog, ...){
       break;//
 
     const char * path = va_arg(arglist, const char *);
-    dmsg(gl_verbose, "recompile ? %f\n", (f64)(tstamp - prog->timestamp));
-    if(shaders[i] != 0 && (tstamp - prog->timestamp) < 1.0)
+
+    if(shaders[i] != 0 && delta < 1.0)
       continue;
     
     if(hasher == NULL){
@@ -229,7 +230,12 @@ int compiled_shader(shader_program * prog, ...){
     ASSERT(vcode != NULL);
     XXH64_update(hasher, vcode, strlen(vcode));
     u64 hsh = XXH64_digest(hasher);
-    if(hsh != hash[i]){    
+
+    if(hsh != hash[i]){
+      dmsg(gl_verbose, "recompiling '%s'\n", path);
+      if(shaders[i] != 0)
+	glDeleteShader(shaders[i]);
+      
       shaders[i] = compileShader(shader_type, vcode);
       hash[i] = hsh;
       change = true;
@@ -239,10 +245,13 @@ int compiled_shader(shader_program * prog, ...){
   }
   va_end(arglist);
   if(change){
+    if(prog->program != 0)
+      glDeleteProgram(prog->program);
     int program = linkGlProgram(i, shaders);
     prog->program = program;
   }
-  prog->timestamp = tstamp;
+  if(delta > 1.0 || change)
+    prog->timestamp = tstamp;
   if(hasher != NULL)
     XXH64_freeState(hasher);
   return change;
