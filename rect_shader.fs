@@ -6,7 +6,7 @@ uniform int mode;
 
 in vec2 uv;
 out vec4 fragcolor;
-
+// -- 
 void main(){
   if(mode == 1){
     vec4 col = texture(tex, uv);

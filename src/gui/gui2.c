@@ -17,6 +17,9 @@
 #include "pid_to_vec4.h"
 #include "pid_lookup.h"
 #include "id_vector.h"
+#include "u32_vector.h"
+#include "window_state.h"
+
 u32 gui_render_window;
 
 data_stream ui_log = {.name = "2UI"};
@@ -29,7 +32,8 @@ typedef struct {
   u64_to_u64 * children;
 
   pid_to_vec4 * background_color;
-
+  window_state * win_state;
+  u32_vector * window_title_vector;
   bool init_dbg;
 }window_data;
 
@@ -141,14 +145,22 @@ pid gui_next_child(pid object, u64 * index){
 }
 
 void on_window_class_render(u64 win_id){
+
   var win = get_glfw_window(win_id);
   
   if(win == NULL){
     var win_ctx = get_window_ctx();
     var idx = win_id;
-    int width = 512;
-    int height = 512;
+    u32 width = 512;
+    u32 height = 512;
+    u32_vector_indexes indexes;
     const char * title = "Fix me";
+    
+    if(window_state_try_get(win_ctx->win_state, &idx, &width, &height, &indexes)){
+      title = (char * ) (win_ctx->window_title_vector->values + indexes.index);
+    }
+    
+
     GLFWwindow * window = module_create_window(width, height, title);
     u64_to_ptr_set(win_ctx->window_ctx, idx, window);
     
@@ -164,9 +176,6 @@ void on_window_class_render(u64 win_id){
     win = get_glfw_window(win_id);
   }
 
-
-
-  
   dmsg(ui_verbose_log, "Rendering.. %i\n", win_id);
   
   var bg = gui_get_background(win_id);
@@ -201,6 +210,10 @@ pobject create_window(float width, float height, const char * title){
 
   var idx = gui_new_object();
   set_baseclass(idx, window_class);
+  u32_vector_indexes indexes = u32_vector_alloc_sequence(win_ctx->window_title_vector, strlen(title) + 1);
+  char * data = (char *) (win_ctx->window_title_vector->values + indexes.index);
+  memcpy(data, title, strlen(title) +1);
+  window_state_set(win_ctx->win_state, idx, (u32)width, (u32) height, indexes);
   pid_lookup_set(win_ctx->window_table, idx);
   
   return idx;
@@ -359,6 +372,10 @@ window_data * window_data = get_context_object(&ctx_holder2, sizeof(window_data[
     window_data->window_ctx = u64_to_ptr_create(NULL);
     window_data->background_color = pid_to_vec4_create(NULL);
     ((bool *)&(window_data->children->is_multi_table))[0] = true;
+    window_data->win_state = window_state_create(NULL);
+    window_data->window_title_vector = u32_vector_create(NULL);
+
+    
     dmsg(ui_log,"Created windows holder\n");
     set_method((size_t)&window_class, render_method, (method) on_window_class_render);
     gui_new_object();

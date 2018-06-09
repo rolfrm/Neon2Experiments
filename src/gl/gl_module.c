@@ -25,7 +25,8 @@ typedef struct{
   GLFWwindow * window;
 
 }gl_context_data;
-static data_stream gl_debug_high = {.name = "gl_high"};
+static data_stream gl_debug_high = {.name = "GL DEBUG"};
+static data_stream gl_info = {.name = "GL INFO"};
 static data_stream glfw_debug = {.name = "GLFW Error"};
 
 static void glfwError(int x, const char * err){
@@ -49,12 +50,12 @@ gl_context_data * get_or_init_context(){
   static bool glfw_inited = false;
   gl_context_data * ctx = get_module_data(&ctx_holder);
   if(!ctx){
-    logd("Creating a new context\n");
+    dmsg(gl_info, "Creating a new context\n");
     glfwSwapInterval(0);
     ctx = alloc0(sizeof(ctx[0]));
     set_module_data(&ctx_holder, ctx);
     if(!glfw_inited){
-      logd("Initialized glfw\n");
+      dmsg(gl_info, "Initialized glfw\n");
       if(!glfwInit())
 	ERROR("Not able to initialize glfw.\n");
       
@@ -67,7 +68,7 @@ gl_context_data * get_or_init_context(){
     glfwWindowHint( GLFW_OPENGL_DEBUG_CONTEXT, true);
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     GLFWwindow * window = glfwCreateWindow(512, 512, "GL MODULE", NULL, NULL);
-    logd("Created context : %i    %i    %i\n", ctx, ctx->window, window);
+    dmsg(gl_info, "Created context : %i    %i    %i\n", ctx, ctx->window, window);
     if(window == NULL)
       ERROR("Unable to create window!\n");
     ASSERT(window != NULL);

@@ -233,6 +233,5 @@ void init_game(){
   for(size_t i = 0; i < game_ctx->game_ids->count[0]; i++){
     load_game_id(i);    
   }
-  logd("loading context..\n");
   dmsg(ui_log, "Loading %i contexts\n", game_ctx->game_ids->count[0]);
 }

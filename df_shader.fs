@@ -5,7 +5,6 @@
 #define type_circ 1
 #define type_polygon 2
 
-
 uniform vec4 color;
 uniform int type;
 
@@ -23,13 +22,13 @@ void main(){
     if(fc.x < 1 && fc.y < 1)
       fragcolor  = color;
     else
-      discard;//fragcolor = vec4(1,1,0,1);
+      discard;
   }else if(type == type_circ){
     float l = length(fc);
     
     if( l < 1)
       fragcolor  = color;
     else
-      discard;//fragcolor  = vec4(1,1,1,1);;
+      discard;
   }   
 }
